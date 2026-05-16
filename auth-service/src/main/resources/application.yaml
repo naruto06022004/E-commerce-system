@@ -1,0 +1,23 @@
+spring:
+  application:
+    name: auth-service
+
+# Cấu hình Eureka Client
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka/
+    register-with-eureka: true
+    fetch-registry: true
+  instance:
+    prefer-ip-address: true # Giúp các service khác tìm thấy auth-service qua IP
+
+keycloak:
+  auth-server-url: http://localhost:8080
+  realm: password
+  resource: backend
+  credentials:
+    secret: SreADsaje1c1IGHtr4sBQ6ZNzImCfhmG
+
+server:
+  port: 8088
