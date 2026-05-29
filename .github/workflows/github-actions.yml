@@ -55,12 +55,25 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      # 4. Thay thế toàn bộ biến môi trường tự động cho cả 3 file của bạn
+      # 4. CHỈ RENDER BIẾN CHO KUBERNETES (BỎ DÒNG RENDER DOCKER-COMPOSE ĐI)
       - name: Render Environment Variables
         run: |
-          envsubst < docker-compose.yml > docker-compose.rendered.yml && mv docker-compose.rendered.yml docker-compose.yml
           envsubst < deployment.yaml > deployment.rendered.yaml && mv deployment.rendered.yaml deployment.yaml
           envsubst < service.yaml > service.rendered.yaml && mv service.rendered.yaml service.yaml
+
+      # 5. Tiến hành Build Image bằng Docker Compose (Nạp biến môi trường trực tiếp tại đây)
+      - name: Build with Docker Compose
+        env:
+          IMAGE_NAME: ${{ secrets.DOCKER_USERNAME }}/department-service
+          IMAGE_TAG: ${{ github.sha }}
+        run: docker compose build
+
+      # 6. Khởi chạy container local (Nạp biến môi trường trực tiếp tại đây)
+      - name: Up Docker Compose Environment
+        env:
+          IMAGE_NAME: ${{ secrets.DOCKER_USERNAME }}/department-service
+          IMAGE_TAG: ${{ github.sha }}
+        run: docker compose up -d
 
       # 5. Tiến hành Build Image bằng Docker Compose
       - name: Build with Docker Compose
