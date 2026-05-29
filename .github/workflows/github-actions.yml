@@ -1,3 +1,7 @@
+# Tạo lại thư mục workflows nếu chưa có
+New-Item -ItemType Directory -Force -Path ".github/workflows"
+
+@'
 name: Build and Deploy System
 
 on:
@@ -32,17 +36,17 @@ jobs:
           distribution: 'temurin'
           cache: maven
 
-      # Tự động quét và build TẤT CẢ các module Maven ra file JAR cùng một lúc
+      # 1. Tự động build tất cả các module có file pom.xml
       - name: Build All Maven Modules
         run: mvn clean package -DskipTests
 
-      # Mẹo nhỏ: Tìm file JAR vừa build xong của department-service và lôi nó ra thư mục gốc
-      - name: Move JAR to Root for Docker Build
+      # 2. Tự động quét tìm file .jar của service con và lôi ra thư mục gốc
+      - name: Auto Find and Move JAR to Root
         run: |
           find . -name "*.jar" -not -path "*/target/wro/*" -exec cp {} ./app.jar \;
 
-      # Tạo một file Dockerfile "mì ăn liền" ngay tại thư mục gốc để Docker Compose bốc luôn file app.jar vừa tìm được
-      - name: Create Temporary Root Dockerfile
+      # 3. Tự động tạo Dockerfile xịn ngay tại thư mục gốc để Docker Compose bốc
+      - name: Create Root Dockerfile
         run: |
           echo 'FROM openjdk:17-jdk-alpine' > Dockerfile
           echo 'COPY app.jar app.jar' >> Dockerfile
@@ -55,17 +59,18 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      # Đổ biến môi trường vào điền đầy đủ cho file docker-compose.yml, deployment.yaml, service.yaml
+      # 4. Bơm biến môi trường điền đầy đủ cho cả 3 file của bạn
       - name: Render Environment Variables
         run: |
           envsubst < docker-compose.yml > docker-compose.rendered.yml && mv docker-compose.rendered.yml docker-compose.yml
           envsubst < deployment.yaml > deployment.rendered.yaml && mv deployment.rendered.yaml deployment.yaml
           envsubst < service.yaml > service.rendered.yaml && mv service.rendered.yaml service.yaml
 
-      # Tiến hành build Image bằng Docker Compose
+      # 5. Build Image local bằng Docker Compose
       - name: Build with Docker Compose
         run: docker compose build
 
-      # Khởi chạy cụm hệ thống lên mượt mà
+      # 6. Khởi chạy cụm hệ thống lên mượt mà
       - name: Up Docker Compose Environment
         run: docker compose up -d
+'@ | Set-Content -Path ".github/workflows/github-actions.yml" -Encoding UTF8
