@@ -5,14 +5,12 @@ services:
     image: ${IMAGE_NAME}:${IMAGE_TAG}
     container_name: department-service
     
-    # 1. THÊM BLOCK BUILD: Chỉ đường cho Docker Compose biết chỗ để tự build
+    # Không cần chỉ định context thư mục con nữa, lấy ngay tại thư mục gốc
     build:
-      context: ./orders-service  # <-- CHÚ Ý: Đổi thành tên thư mục con chứa file pom.xml của bạn (ví dụ: orders-service hoặc department-service)
+      context: .
       dockerfile: Dockerfile
 
-    # 2. SỬA DÒNG NÀY: Bảo Docker chỉ pull nếu dưới máy không có sẵn Image
     pull_policy: if_not_present
-
     ports:
       - '${APP_PORT}:${APP_PORT}'
     extra_hosts:

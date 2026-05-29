@@ -7,8 +7,7 @@ on:
       - main
 
 env:
-  # Cấu hình các biến môi trường để nạp vào 3 file YAML của bạn
-  IMAGE_NAME: doductuyen/department-service
+  IMAGE_NAME: ${{ secrets.DOCKER_USERNAME }}/department-service
   IMAGE_TAG: ${{ github.sha }}
   APP_PORT: 8080
   DB_URL: jdbc:mysql://host.docker.internal:3306/your_database
@@ -23,7 +22,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      # 1. Cài đặt công cụ render biến môi trường (envsubst)
       - name: Install envsubst
         run: sudo apt-get update && sudo apt-get install -y gettext-base
 
@@ -34,14 +32,22 @@ jobs:
           distribution: 'temurin'
           cache: maven
 
-      # 2. Build Maven (Thư mục ngoài cùng hoặc trỏ đúng làm mẫu)
-      - name: Build Maven Application
+      # Tự động quét và build TẤT CẢ các module Maven ra file JAR cùng một lúc
+      - name: Build All Maven Modules
+        run: mvn clean package -DskipTests
+
+      # Mẹo nhỏ: Tìm file JAR vừa build xong của department-service và lôi nó ra thư mục gốc
+      - name: Move JAR to Root for Docker Build
         run: |
-          if [ -f "pom.xml" ]; then
-            mvn clean package -DskipTests
-          else
-            cd orders-service && mvn clean package -DskipTests && cd ..
-          fi
+          find . -name "*.jar" -not -path "*/target/wro/*" -exec cp {} ./app.jar \;
+
+      # Tạo một file Dockerfile "mì ăn liền" ngay tại thư mục gốc để Docker Compose bốc luôn file app.jar vừa tìm được
+      - name: Create Temporary Root Dockerfile
+        run: |
+          echo 'FROM openjdk:17-jdk-alpine' > Dockerfile
+          echo 'COPY app.jar app.jar' >> Dockerfile
+          echo 'EXPOSE 8080' >> Dockerfile
+          echo 'ENTRYPOINT ["java","-jar","/app.jar"]' >> Dockerfile
 
       - name: Login Docker Hub
         uses: docker/login-action@v2
@@ -49,33 +55,17 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      # 3. KỸ THUẬT CHÍ MẠNG: Ghi đè biến vào file docker-compose.yml và Build
-      - name: Render and Build Docker Compose
+      # Đổ biến môi trường vào điền đầy đủ cho file docker-compose.yml, deployment.yaml, service.yaml
+      - name: Render Environment Variables
         run: |
-          envsubst < docker-compose.yml > docker-compose.rendered.yml
-          mv docker-compose.rendered.yml docker-compose.yml
-          docker compose build
+          envsubst < docker-compose.yml > docker-compose.rendered.yml && mv docker-compose.rendered.yml docker-compose.yml
+          envsubst < deployment.yaml > deployment.rendered.yaml && mv deployment.rendered.yaml deployment.yaml
+          envsubst < service.yaml > service.rendered.yaml && mv service.rendered.yaml service.yaml
 
-      # 4. KỸ THUẬT CHÍ MẠNG: Ghi đè biến vào các file Kubernetes (deployment, service)
-      - name: Render Kubernetes Manifests
-        run: |
-          envsubst < deployment.yaml > deployment.rendered.yaml
-          mv deployment.rendered.yaml deployment.yaml
-          envsubst < service.yaml > service.rendered.yaml
-          mv service.rendered.yaml service.yaml
-          
-          # Hiển thị ra log để bạn kiểm tra xem biến đã nhận chuẩn chưa
-          echo "=== REVIEW DEPLOYMENT.YAML ==="
-          cat deployment.yaml
+      # Tiến hành build Image bằng Docker Compose
+      - name: Build with Docker Compose
+        run: docker compose build
 
-      # 5. Khởi chạy Docker Compose (Nếu nộp bài Lab Docker Compose)
+      # Khởi chạy cụm hệ thống lên mượt mà
       - name: Up Docker Compose Environment
         run: docker compose up -d
-
-      # 6. Triển khai vào Kubernetes (Nếu bài Lab yêu cầu chạy K8s)
-      # Bước này chạy độc lập, nếu máy ảo GitHub có cài sẵn minikube/kind thì nó sẽ ăn ngay
-      - name: Deploy to Kubernetes
-        run: |
-          echo "Applying Kubernetes manifests..."
-          # kubectl apply -f deployment.yaml --validate=false
-          # kubectl apply -f service.yaml --validate=false
