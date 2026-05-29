@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  department-service:
+    # 1. Đổi tên Image về đúng tài khoản Docker Hub của bạn
+    image: doductuyen/department-service:latest
+    
+    # 2. Chỉ đường cho Docker Compose biết thư mục chứa code và Dockerfile con để tự Build
+    build:
+      context: ./orders-service   # CHÚ Ý: Đổi tên này thành chính xác tên thư mục chứa dịch vụ bạn muốn chạy (Ví dụ: orders-service hoặc auth-service...)
+      dockerfile: Dockerfile
+      
+    container_name: department-service
+    ports:
+      - "8080:8080"  # Đặt cứng port chạy thử nghiệm cố định (Ví dụ: 8080)
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      - APP_PORT=8080
+      - DB_URL=jdbc:mysql://host.docker.internal:3306/your_database  # Điền link database test của bạn nếu cần
+      - DB_USERNAME=root
+      - DB_PASSWORD=root
+    restart: always
