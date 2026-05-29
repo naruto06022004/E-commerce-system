@@ -32,7 +32,7 @@ jobs:
       # 1. SỬA TẠI ĐÂY: Chỉ định chính xác thư mục chứa code java của bạn để build (Ví dụ: department-service)
       # CHÚ Ý: Nếu thư mục chứa code java dưới máy của bạn tên là orders-service thì đổi chữ "department-service/pom.xml" thành "orders-service/pom.xml"
       - name: Build Maven Module
-        run: mvn clean package -DskipTests -f department-service/pom.xml
+        run: mvn clean package -DskipTests -f orders-service/pom.xml
 
       # 2. Tìm file .jar trong thư mục target của service đó và lôi ra ngoài thư mục gốc
       - name: Auto Find and Move JAR to Root
