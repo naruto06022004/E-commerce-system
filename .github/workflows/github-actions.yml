@@ -32,16 +32,16 @@ jobs:
           distribution: 'temurin'
           cache: maven
 
-      # 1. Tự động đóng gói tất cả các module có file pom.xml
+      # 1. Tự động đóng gói code Java ra file JAR
       - name: Build All Maven Modules
         run: mvn clean package -DskipTests
 
-      # 2. Tự động tìm kiếm file .jar vừa build xong của service con và đưa ra thư mục gốc
+      # 2. Tự động tìm file .jar vừa build xong đưa ra thư mục gốc
       - name: Auto Find and Move JAR to Root
         run: |
           find . -name "*.jar" -not -path "*/target/wro/*" -exec cp {} ./app.jar \;
 
-      # 3. Tự động tạo một file Dockerfile chuẩn tại thư mục gốc để Docker Compose bốc
+      # 3. Tự động tạo một file Dockerfile tạm thời tại thư mục gốc để Docker Compose bốc
       - name: Create Temporary Root Dockerfile
         run: |
           echo 'FROM openjdk:17-jdk-alpine' > Dockerfile
@@ -55,30 +55,22 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      # 4. CHỈ RENDER BIẾN CHO KUBERNETES (BỎ DÒNG RENDER DOCKER-COMPOSE ĐI)
+      # 4. Thay thế biến môi trường cho Kubernetes Manifests
       - name: Render Environment Variables
         run: |
           envsubst < deployment.yaml > deployment.rendered.yaml && mv deployment.rendered.yaml deployment.yaml
           envsubst < service.yaml > service.rendered.yaml && mv service.rendered.yaml service.yaml
 
-      # 5. Tiến hành Build Image bằng Docker Compose (Nạp biến môi trường trực tiếp tại đây)
+      # 5. ÉP BUỘC BUILD IMAGE LOCAL TRƯỚC (Đặt tên trùng khớp hoàn toàn để không đi pull trên mạng)
       - name: Build with Docker Compose
         env:
           IMAGE_NAME: ${{ secrets.DOCKER_USERNAME }}/department-service
           IMAGE_TAG: ${{ github.sha }}
         run: docker compose build
 
-      # 6. Khởi chạy container local (Nạp biến môi trường trực tiếp tại đây)
+      # 6. Khởi chạy container từ image vừa build xong dưới máy ảo
       - name: Up Docker Compose Environment
         env:
           IMAGE_NAME: ${{ secrets.DOCKER_USERNAME }}/department-service
           IMAGE_TAG: ${{ github.sha }}
-        run: docker compose up -d
-
-      # 5. Tiến hành Build Image bằng Docker Compose
-      - name: Build with Docker Compose
-        run: docker compose build
-
-      # 6. Khởi chạy container local mượt mà
-      - name: Up Docker Compose Environment
         run: docker compose up -d
