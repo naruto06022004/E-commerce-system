@@ -1,0 +1,16 @@
+services:
+  department-service:
+    image: ${IMAGE_NAME}:${IMAGE_TAG}
+    container_name: department-service
+    pull_policy: always
+
+    ports:
+      - '${APP_PORT}:${APP_PORT}'
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      - APP_PORT=${APP_PORT}
+      - DB_URL=${DB_URL}
+      - DB_USERNAME=${DB_USERNAME}
+      - DB_PASSWORD=${DB_PASSWORD}
+    restart: always
