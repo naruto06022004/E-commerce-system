@@ -40,9 +40,10 @@ jobs:
           find . -name "*.jar" -not -path "*/target/wro/*" -exec cp {} ./app.jar \;
 
       # 3. Tạo Dockerfile chuẩn ngay tại thư mục gốc
+   # 3. Thay đổi image FROM sang eclipse-temurin:17-jdk-alpine
       - name: Create Temporary Root Dockerfile
         run: |
-          echo 'FROM openjdk:17-jdk-alpine' > Dockerfile
+          echo 'FROM eclipse-temurin:17-jdk-alpine' > Dockerfile
           echo 'COPY app.jar app.jar' >> Dockerfile
           echo 'EXPOSE 8080' >> Dockerfile
           echo 'ENTRYPOINT ["java","-jar","/app.jar"]' >> Dockerfile
