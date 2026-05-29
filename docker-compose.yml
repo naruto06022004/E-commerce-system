@@ -1,11 +1,11 @@
-﻿version: '3.8'
+version: '3.8'
 
 services:
   department-service:
     image: ${IMAGE_NAME}:${IMAGE_TAG}
     container_name: department-service
     
-    # Ép lấy luôn context build tại thư mục gốc mà không cần chỉ định thư mục con
+    # Ép lấy luôn context build tại thư mục gốc mà không cần chỉ định thư mục con lằng nhằng
     build:
       context: .
       dockerfile: Dockerfile
