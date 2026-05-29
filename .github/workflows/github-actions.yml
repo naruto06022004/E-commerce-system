@@ -69,7 +69,7 @@ jobs:
       # 6. Dùng lệnh Docker thuần để tự build image local
       - name: Build Docker Image Locally
         run: |
-          docker build -t ${{ secrets.DOCKER_USERNAME }}/department-service:${{ github.sha }} .
+          docker build -t ${{ secrets.DOCKER_USERNAME }}/orders-service:${{ github.sha }} .
 
       - name: Pipeline Completed Successfully
         run: |
