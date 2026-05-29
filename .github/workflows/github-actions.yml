@@ -6,14 +6,6 @@ on:
       - dev
       - main
 
-env:
-  IMAGE_NAME: ${{ secrets.DOCKER_USERNAME }}/department-service
-  IMAGE_TAG: ${{ github.sha }}
-  APP_PORT: 8080
-  DB_URL: jdbc:mysql://host.docker.internal:3306/your_database
-  DB_USERNAME: root
-  DB_PASSWORD: root
-
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
@@ -32,16 +24,16 @@ jobs:
           distribution: 'temurin'
           cache: maven
 
-      # 1. Tự động đóng gói code Java ra file JAR
+      # 1. Tự động build code Java ra file JAR
       - name: Build All Maven Modules
         run: mvn clean package -DskipTests
 
-      # 2. Tự động tìm file .jar vừa build xong đưa ra thư mục gốc
+      # 2. Tự động quét và đưa file .jar ra thư mục gốc
       - name: Auto Find and Move JAR to Root
         run: |
           find . -name "*.jar" -not -path "*/target/wro/*" -exec cp {} ./app.jar \;
 
-      # 3. Tự động tạo một file Dockerfile tạm thời tại thư mục gốc để Docker Compose bốc
+      # 3. Tạo Dockerfile chuẩn ngay tại thư mục gốc để Docker Compose build
       - name: Create Temporary Root Dockerfile
         run: |
           echo 'FROM openjdk:17-jdk-alpine' > Dockerfile
@@ -55,22 +47,31 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      # 4. Thay thế biến môi trường cho Kubernetes Manifests
-      - name: Render Environment Variables
+      # 4. SỬA TẠI ĐÂY: Bỏ hoàn toàn dòng render docker-compose để bảo vệ file cấu hình gốc
+      - name: Render Kubernetes Manifests
+        env:
+          IMAGE_NAME: ${{ secrets.DOCKER_USERNAME }}/department-service
+          IMAGE_TAG: ${{ github.sha }}
+          APP_PORT: 8080
         run: |
           envsubst < deployment.yaml > deployment.rendered.yaml && mv deployment.rendered.yaml deployment.yaml
           envsubst < service.yaml > service.rendered.yaml && mv service.rendered.yaml service.yaml
 
-      # 5. ÉP BUỘC BUILD IMAGE LOCAL TRƯỚC (Đặt tên trùng khớp hoàn toàn để không đi pull trên mạng)
+      # 5. Ép Docker Compose build image local với đúng Tên và Tag tương ứng
       - name: Build with Docker Compose
         env:
           IMAGE_NAME: ${{ secrets.DOCKER_USERNAME }}/department-service
           IMAGE_TAG: ${{ github.sha }}
+          APP_PORT: 8080
         run: docker compose build
 
-      # 6. Khởi chạy container từ image vừa build xong dưới máy ảo
+      # 6. Khởi chạy container bằng chính image local vừa build
       - name: Up Docker Compose Environment
         env:
           IMAGE_NAME: ${{ secrets.DOCKER_USERNAME }}/department-service
           IMAGE_TAG: ${{ github.sha }}
+          APP_PORT: 8080
+          DB_URL: jdbc:mysql://host.docker.internal:3306/your_database
+          DB_USERNAME: root
+          DB_PASSWORD: root
         run: docker compose up -d
