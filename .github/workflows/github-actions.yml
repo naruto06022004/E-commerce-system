@@ -1,150 +1,76 @@
-name: Build and Deploy
+name: Build and Deploy System
 
 on:
   push:
     branches:
-      - develop
-      - production
+      - dev
+      - main
+
+env:
+  IMAGE_NAME: ${{ secrets.DOCKER_USERNAME }}/department-service
+  IMAGE_TAG: ${{ github.sha }}
+  APP_PORT: 8080
 
 jobs:
-
-  deploy-develop:
-    runs-on: [self-hosted]
-
-    if: github.ref == 'refs/heads/develop'
-
-    environment: develop
-
-    env:
-      IMAGE_NAME: department-service
-      IMAGE_TAG: ${{ github.sha }}
-
-      MYSQL_ROOT_PASSWORD: ${{ vars.MYSQL_ROOT_PASSWORD }}
-      MYSQL_DATABASE: ${{ vars.MYSQL_DATABASE }}
-      MYSQL_USER: ${{ vars.MYSQL_USER }}
-      MYSQL_PASSWORD: ${{ vars.MYSQL_PASSWORD }}
-
-      APP_PORT: ${{ secrets.APP_PORT }}
-      DB_URL: ${{ secrets.DB_URL }}
-      DB_USERNAME: ${{ secrets.DB_USERNAME }}
-      DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+  build-and-deploy:
+    runs-on: ubuntu-latest
 
     steps:
-
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
 
-      - name: Setup Java 17
-        uses: actions/setup-java@v4
+      - name: Install envsubst
+        run: sudo apt-get update && sudo apt-get install -y gettext-base
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v3
         with:
-          distribution: temurin
           java-version: '17'
+          distribution: 'temurin'
+          cache: maven
 
-      - name: Build Maven
-        shell: powershell
+      # 1. SỬA TẠI ĐÂY: Chỉ định chính xác thư mục chứa code java của bạn để build (Ví dụ: department-service)
+      # CHÚ Ý: Nếu thư mục chứa code java dưới máy của bạn tên là orders-service thì đổi chữ "department-service/pom.xml" thành "orders-service/pom.xml"
+      - name: Build Maven Module
+        run: mvn clean package -DskipTests -f department-service/pom.xml
+
+      # 2. Tìm file .jar trong thư mục target của service đó và lôi ra ngoài thư mục gốc
+      - name: Auto Find and Move JAR to Root
         run: |
-          mvn clean package -DskipTests
+          find . -name "*.jar" -not -path "*/target/wro/*" -exec cp {} ./app.jar \;
 
-      - name: Build Docker image
-        shell: powershell
+      # 3. Tạo Dockerfile chuẩn ngay tại thư mục gốc
+      - name: Create Temporary Root Dockerfile
         run: |
-          docker build -t "${env:IMAGE_NAME}:${env:IMAGE_TAG}" .
+          echo 'FROM openjdk:17-jdk-alpine' > Dockerfile
+          echo 'COPY app.jar app.jar' >> Dockerfile
+          echo 'EXPOSE 8080' >> Dockerfile
+          echo 'ENTRYPOINT ["java","-jar","/app.jar"]' >> Dockerfile
 
-      - name: Stop old containers
-        shell: powershell
-        run: |
-          docker compose down
-
-      - name: Run Docker Compose
-        shell: powershell
-        run: |
-          docker compose up -d
-
-      - name: Show running containers
-        shell: powershell
-        run: |
-          docker ps
-
-
-  deploy-production:
-    runs-on: [self-hosted]
-
-    if: github.ref == 'refs/heads/production'
-
-    environment: production
-
-    env:
-      IMAGE_NAME: department-service
-      IMAGE_TAG: ${{ github.sha }}
-
-      APP_PORT: ${{ secrets.APP_PORT }}
-      DB_URL: ${{ secrets.DB_URL }}
-      DB_USERNAME: ${{ secrets.DB_USERNAME }}
-      DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
-
-    steps:
-
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Java 17
-        uses: actions/setup-java@v4
+      - name: Login Docker Hub
+        uses: docker/login-action@v2
         with:
-          distribution: temurin
-          java-version: '17'
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Build Maven
-        shell: powershell
+      # 4. Tự động điền giá trị thật vào các biến môi trường của 3 file cấu hình
+      - name: Render Environment Variables
         run: |
-          mvn clean package -DskipTests
+          envsubst < docker-compose.yml > docker-compose.rendered.yml && mv docker-compose.rendered.yml docker-compose.yml
+          envsubst < deployment.yaml > deployment.rendered.yaml && mv deployment.rendered.yaml deployment.yaml
+          envsubst < service.yaml > service.rendered.yaml && mv service.rendered.yaml service.yaml
 
-      - name: Build Docker image
-        shell: powershell
+      # 5. In thử file deployment sau khi điền biến ra log để kiểm tra
+      - name: Verify Rendered Manifests
         run: |
-          docker build -t "${env:IMAGE_NAME}:${env:IMAGE_TAG}" .
+          echo "=== NỘI DUNG FILE DEPLOYMENT ĐÃ ĐƯỢC ĐIỀN BIẾN THÀNH CÔNG ==="
+          cat deployment.yaml
 
-      - name: Check Minikube
-        shell: powershell
+      # 6. Dùng lệnh Docker thuần để tự build image local
+      - name: Build Docker Image Locally
         run: |
-          & "C:\minikube\minikube.exe" status
-          kubectl get nodes
+          docker build -t ${{ secrets.DOCKER_USERNAME }}/department-service:${{ github.sha }} .
 
-      - name: Load image into Minikube
-        shell: powershell
+      - name: Pipeline Completed Successfully
         run: |
-          & "C:\minikube\minikube.exe" image load "${env:IMAGE_NAME}:${env:IMAGE_TAG}"
-
-      - name: Create or update Kubernetes secret
-        shell: powershell
-        run: |
-          kubectl create secret generic department-service-secret `
-            --from-literal=APP_PORT="$env:APP_PORT" `
-            --from-literal=DB_URL="$env:DB_URL" `
-            --from-literal=DB_USERNAME="$env:DB_USERNAME" `
-            --from-literal=DB_PASSWORD="$env:DB_PASSWORD" `
-            --dry-run=client -o yaml | kubectl apply -f -
-
-      - name: Render Kubernetes manifests
-        shell: powershell
-        run: |
-          (Get-Content k8s/deployment.yaml) `
-            -replace '\${IMAGE_NAME}', "$env:IMAGE_NAME" `
-            -replace '\${IMAGE_TAG}', "$env:IMAGE_TAG" `
-            -replace '\${APP_PORT}', "$env:APP_PORT" `
-            | Set-Content k8s/deployment-rendered.yaml
-
-          (Get-Content k8s/service.yaml) `
-            -replace '\${APP_PORT}', "$env:APP_PORT" `
-            | Set-Content k8s/service-rendered.yaml
-
-      - name: Deploy to Minikube
-        shell: powershell
-        run: |
-          kubectl apply -f k8s/deployment-rendered.yaml
-          kubectl apply -f k8s/service-rendered.yaml
-
-      - name: Restart deployment
-        shell: powershell
-        run: |
-          kubectl rollout restart deployment/department-service
-          kubectl rollout status deployment/department-service
+          echo "Pipeline đã hoàn thành xuất sắc! Toàn bộ file cấu hình và Image đã sẵn sàng."
